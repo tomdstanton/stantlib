@@ -49,6 +49,8 @@ def quit_with_error(message: str):
 
 
 def decompress_byte_stream(byte_stream: bytes) -> bytes:
+    if not byte_stream:
+        quit_with_error("Nothing to decompress")
     try:
         decompressed_data = gzip.decompress(byte_stream)
         log("Decompressed input")
