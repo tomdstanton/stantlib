@@ -14,10 +14,9 @@ import re
 import sys
 from argparse import ArgumentParser
 from pathlib import Path
-from re import compile
 
 # ................ Globals ................ #
-REGEX = compile('[^a-zA-Z]')
+REGEX = re.compile('[^a-zA-Z]')
 
 
 class Rec:

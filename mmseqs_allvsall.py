@@ -24,55 +24,10 @@ from tempfile import TemporaryDirectory
 from Bio import SeqIO, SeqRecord
 
 
-def main():
-    check_python_version()
-    args = parse_args(sys.argv[1:])
-    check_programs(['mmseqs'], verbose=args.verbose)
-
-    start = time()
-
-    # Create a temporary directory to store the concatenated fasta file and the mmseqs2 database
-    with TemporaryDirectory() as tmpdir:
-        fasta_file = Path(tmpdir) / "concatenated_proteins.faa"
-        with open(fasta_file, "wt") as f:
-            for file in args.input:
-                if file.suffix in [".gbk", ".gbff", ".gb"]:
-                    f.write(
-                        parse_genbank(file, translate=args.translate, table=args.table, to_stop=args.to_stop,
-                                      stop_symbol=args.stop_symbol)
-                    )
-                elif file.suffix in [".faa", ".fasta", ".fa"]:
-                    f.write(parse_fasta(file, table=args.table, to_stop=args.to_stop, stop_symbol=args.stop_symbol))
-                else:
-                    warning(f"Unknown file type for {file}")
-
-        # Check the concatenated fasta file is not empty
-        check_file(fasta_file)
-
-        # Create the database, files are checked inside function
-        db_prefix, result_prefix = Path(tmpdir) / "allvsall_db", Path(tmpdir) / "allvsall_result"
-        createdb(fasta_file, db_prefix, verbose=args.verbose)
-
-        # Run the alignment
-        m8_file = align(db_prefix, db_prefix, result_prefix, threads=args.threads, verbose=args.verbose,
-                        extra_args=args.extra_args)
-
-        # Move the result file to the desired location
-        m8_file.rename(args.outfile)
-
-        # Optionally keep the temporary directory
-        if args.keep:
-            Path(tmpdir).rename(Path.cwd() / f"mmseqs_allvsall_{time()::0.0f}")
-
-    # Print the time taken
-    log(f"Result file written to {args.outfile} ({time() - start:.2f} seconds)", end="\n\n")
-
-
 DESCRIPTION = """
 Run mmseqs2 all-vs-all alignment
 -----------------------------------------------------------------------------------------
-    Takes fasta or genbank files containing CDS/protein sequences and 
-    runs an all-vs-all alignment using mmseqs2.
+    Takes protein sequences runs an all-vs-all alignment using mmseqs2.
 -----------------------------------------------------------------------------------------
 """
 
@@ -80,7 +35,7 @@ Run mmseqs2 all-vs-all alignment
 def parse_args(args):
     parser = ArgumentParser(description=DESCRIPTION, formatter_class=RawTextHelpFormatter,
                             epilog="Note: mmseqs2 must be installed and in your PATH",
-                            usage="python3 mmseqs_allvsall.py file.{fasta,gbk} [file.{fasta,gbk}... ] out.m8")
+                            usage="mmseqs_allvsall file.{fasta,gbk} [file.{fasta,gbk}... ] out.m8")
     parser.add_argument("input", nargs="+", type=lambda x: check_file(Path(x)),
                         help="Fasta or Genbank file(s) containing the CDS/Protein sequences to align.\n"
                              "If a DNA fasta file is provided, it will be translated on the fly.\n"
@@ -133,11 +88,6 @@ def error(message: str, **kwargs):
 def quit_with_error(message: str, **kwargs):
     error(message, **kwargs)
     sys.exit(1)
-
-
-def check_python_version(major=3, minor=9):
-    if sys.version_info.major < major or sys.version_info.minor < minor:
-        quit_with_error("Python 3.9 or greater is required")
 
 
 def align(query_prefix: Path, target_prefix: Path, result_prefix: Path, extra_args: str = '', threads: int = 1,
@@ -254,10 +204,10 @@ def parse_fasta(fasta: Path, to_stop: bool = True, table: int = 11, stop_symbol:
 
 
 def parse_genbank(genbank: Path, translate: bool = True, to_stop: bool = True, table: int = 11, stop_symbol: str = '*'):
-    """Parse a genbank file and write to a file handle"""
+    """Parse a gff file and write to a file handle"""
     protein_records = ''
     try:
-        protein_records += ''.join(parse_gb_record(r, "CDS", translate, to_stop, table, stop_symbol) for r in SeqIO.parse(genbank, 'genbank'))
+        protein_records += ''.join(parse_gb_record(r, "CDS", translate, to_stop, table, stop_symbol) for r in SeqIO.parse(genbank, 'gff'))
     except ValueError:
         warning(f'Failed to parse {genbank}')
     return protein_records
@@ -285,4 +235,27 @@ def parse_gb_record(record: SeqRecord, feature_type: str = "CDS", translate: boo
 
 
 if __name__ == '__main__':
-    main()
+    args = parse_args(sys.argv[1:])
+    check_programs(['mmseqs'], verbose=args.verbose)
+
+    start = time()
+
+    # Create a temporary directory to store the concatenated fasta file and the mmseqs2 database
+    with TemporaryDirectory() as tmpdir:
+        # Create the database, files are checked inside function
+        db_prefix, result_prefix = Path(tmpdir) / "allvsall_db", Path(tmpdir) / "allvsall_result"
+        createdb(fasta_file, db_prefix, verbose=args.verbose)
+
+        # Run the alignment
+        m8_file = align(db_prefix, db_prefix, result_prefix, threads=args.threads, verbose=args.verbose,
+                        extra_args=args.extra_args)
+
+        # Move the result file to the desired location
+        m8_file.rename(args.outfile)
+
+        # Optionally keep the temporary directory
+        if args.keep:
+            Path(tmpdir).rename(Path.cwd() / f"mmseqs_allvsall_{time()::0.0f}")
+
+    # Print the time taken
+    log(f"Result file written to {args.outfile} ({time() - start:.2f} seconds)", end="\n\n")

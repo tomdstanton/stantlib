@@ -1,50 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-genbank-slicer
------------------
-BioPython-based genbank slicing tool.
-Takes Genbank record(s) from a file or stdin and slices between two
-markers, if it finds the markers.
-The markers can be a mix of exact numerical positions or strings which
-an be associated with unique features such as a gene name, product 
-or locus tag.
------------------
-Requires:
-- Python >=3.9
-- BioPython >=1.76
------------------
-Tom Stanton, 2022
-"""
 
-# ............... Imports ............... #
+
 from Bio import SeqIO
 import argparse
 import sys
 import os
 import re
 
-# from Bio import BiopythonWarning
-# from warnings import filterwarnings
-# filterwarnings("ignore", category=BiopythonWarning)
 
-# ............... Attributes ............... #
-__version__ = '0.0.1'
-__author__ = "Tom Stanton"
-__maintainer__ = "Tom Stanton"
-__email__ = "tomdstanton@gmail.com"
-__status__ = "Development"
-__title__ = 'genbank-slicer'
-__author_email__ = 'tomdstanton@gmail.com'
-__description__ = 'BioPython-based genbank slicing tool'
-__license__ = 'gpl-3.0'
 
-# ............... Main Program ............... #
 def main():
-    # \\\ Parse args \\\ #
     args = parse_args(sys.argv[1:])  # Uncomment below for testing
-    #args = parse_args('/Users/tom/Bioinformatics/python_scripts/genbank-slicer/GCF_020526025.1.gbk -if TonB'.split())
+    #args = parse_args('/Users/tom/Bioinformatics/python_scripts/gff-slicer/GCF_020526025.1.gbk -if TonB'.split())
 
     start, end = None, None
     if args.slice:
@@ -58,7 +27,7 @@ def main():
         except Exception as e:
             quit_with_error(f'{e}\n{args.slice} not a valid slice format')
 
-    # \\\ Iterate over files \\\ #
+
     for gbk in args.genbank:
         # \\\ Check input \\\ #
         if gbk == '-':
@@ -69,7 +38,7 @@ def main():
                 continue
 
         # \\\ Iterate over records \\\ #
-        for rec in SeqIO.parse(gbk, 'genbank'):
+        for rec in SeqIO.parse(gbk, 'gff'):
             if args.include_records:
                 x = [i for i in args.include_records if i in [rec.id, rec.name]]
                 if not x:
@@ -167,9 +136,9 @@ def main():
 
 
 def parse_args(args):
-    parser = argparse.ArgumentParser(description='genbank-slicer',
+    parser = argparse.ArgumentParser(description='gff-slicer',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('genbank', nargs='+', help='Genbank file(s) or stream', default='-', metavar='<STDIN>')
+    parser.add_argument('gff', nargs='+', help='Genbank file(s) or stream', default='-', metavar='<STDIN>')
     parser.add_argument('-s', '--slice', nargs='?',
                         help=f'Slice range, formatted as start:end.\n'
                              f'This can be a mix of integers and strings.\n'
@@ -181,17 +150,12 @@ def parse_args(args):
     # parser.add_argument('-ef', '--exclude_features', nargs='*', help='Space-separated list of features to exclude')
     parser.add_argument('-ir', '--include_records', nargs='*', help='Space-separated list of records to include')
     parser.add_argument('-er', '--exclude_records', nargs='*', help='Space-separated list of records to exclude')
-    parser.add_argument('-o', '--outfmt', choices=['genbank', 'fasta'], help='<STOUT format>', default='genbank')
+    parser.add_argument('-o', '--outfmt', choices=['gff', 'fasta'], help='<STOUT format>', default='gff')
     parser.add_argument('-q', '--qualifiers', nargs='*', help='Genbank qualifiers to search for string slice points',
                         default=['gene', 'locus_tag', 'old_locus_tag', 'note', 'product', 'protein_id'])
     parser.add_argument('--version', action='version', version=f'{__title__} {__version__}',
                         help="Show version number and exit")
     return parser.parse_args(args)
-
-
-def quit_with_error(message):
-    print(f'[ERROR]: {message}', file=sys.stderr)
-    sys.exit(1)
 
 
 if __name__ == '__main__':
