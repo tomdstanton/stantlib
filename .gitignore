@@ -1,5 +1,4 @@
 .idea/
-stantlib/
 # Created by https://www.gitignore.io/api/macos,linux,django,python,pycharm
 
 ### Django ###
@@ -212,3 +211,4 @@ ENV/
 /site
 
 # End of https://www.gitignore.io/api/macos,linux,django,python,pycharm
+/stantlib/
