@@ -65,7 +65,6 @@ def decompress_byte_stream(byte_stream: bytes) -> bytes:
 def read_file(file: str, compressed: bool | str = "unknown") -> bytes:
     if file == '-':
         log("Reading from stdin")
-        # sys.stdin.seek(0)  # We are potentially reading from buffer twice so make sure it's at the beginning
         if compressed == "unknown" or True:
             return decompress_byte_stream(sys.stdin.buffer.read())
         else:
@@ -144,12 +143,11 @@ def parse_args(a):
     parser = argparse.ArgumentParser(
         description=__description__, formatter_class=argparse.RawTextHelpFormatter,
         add_help=False, usage='%(prog)s <fastq> [options]',
-        epilog='If --lower and --upper are not specified, stats will be used to determine the cutoffs')
-    input = parser.add_argument_group(bold('Input'))
-    input.add_argument('fastq', help='Path to fastq(.gz) file or - for stdin', metavar="<fastq>",
-                       # nargs='?', default='-'
-                       )
-    options = parser.add_argument_group(bold('Options'))
+        epilog='')
+    positionals = parser.add_argument_group(bold('Input'))
+    positionals.add_argument('fastq', help='Path to fastq(.gz) file or - for stdin', nargs='?', default='-')
+    options = parser.add_argument_group(
+        bold('Options'), "If --lower and --upper are not specified, stats will be used to determine the cutoffs")
     options.add_argument('-u', '--upper', type=float, default=1, help='Upper GC content cutoff as float',
                          metavar="1.0")
     options.add_argument('-l', '--lower', type=float, default=0, help='Lower GC content cutoff as float',
@@ -161,14 +159,13 @@ def parse_args(a):
                          help='Draw a histogram of read GC and exit\nProviding an int will change binwidth')
     options.add_argument('-h', '--help', action='help', help='Show this help message and exit')
     options.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}')
-    if len(a) == 0:
+    if len(a):
         parser.print_help(sys.stderr)
         sys.exit(1)
     return parser.parse_args(a)
 
 
-# def main():
-if __name__ == '__main__':
+def main():
     args = parse_args(sys.argv[1:])
     # args = parse_args(['/Users/tom/Bioinformatics/stantlib/stantlib/test_data/ovc1_1.fastq'])
 
@@ -216,4 +213,7 @@ if __name__ == '__main__':
             sys.stdout.buffer.write(b'\n'.join(record) + b'\n')
 
     log("Done!")
-    sys.exit(0)
+
+
+if __name__ == '__main__':
+    main()
