@@ -88,12 +88,12 @@ def merge_ranges(ranges: list[tuple[int, int]], tolerance=0) -> list[tuple[int, 
 
 def parse_args(a):
     parser = argparse.ArgumentParser(
-        description=bold(__description__), add_help=False, usage=f'%(prog)s <gbk> [filter] [options]',
+        description=bold(__description__), add_help=False, usage=f'%(prog)s <genbank> [filter] [options]',
         epilog=f'Author: {__author__}\tEmail: {__author_email__}\tLicense: {__license__}\tVersion: {__version__}')
 
     positionals = parser.add_argument_group(bold('Input'))
-    positionals.add_argument('file', metavar="<gbk>", default='-', nargs="?",
-                             help='Path to genbank file (default: stdin)', type=argparse.FileType('rt'))
+    positionals.add_argument('genbank', default='-', nargs="?",
+                             help='Genbank file or - for stdin (default: stdin)', type=argparse.FileType('rt'))
 
     filter_args = parser.add_mutually_exclusive_group(required=True)
     filter_args.add_argument('-s', '--slice', metavar="", nargs="+", type=check_slice, default=[],
@@ -113,9 +113,10 @@ def parse_args(a):
     return parser.parse_args(a)
 
 
-def main():
+if __name__ == '__main__':
     args = parse_args(sys.argv[1:])
-    for record in SeqIO.parse(args.file, 'genbank'):
+
+    for record in SeqIO.parse(args.genbank, 'genbank'):
         feature_slices = [] + args.slice
 
         if args.feature:
@@ -125,12 +126,8 @@ def main():
 
         if args.record:
             if args.record.search(str(record)):
-                sys.stdout.write(record.format(args.outfmt))
+                SeqIO.write(record, sys.stdout, args.outfmt)
 
         if feature_slices:
             for start, end in merge_ranges(feature_slices, args.merge):
-                sys.stdout.write(record[start:end].format(args.outfmt))
-
-
-if __name__ == '__main__':
-    main()
+                SeqIO.write(record[start:end], sys.stdout, args.outfmt)

@@ -69,10 +69,11 @@ def parse_args(a):
 
     positionals = parser.add_argument_group(bold('Input'), "Breaks are relative to the reference")
     positionals.add_argument('accessions', nargs='+', help='List of accessions to convert to a regex',
-                             type=lambda x: check_equal_length(x))
-    options = parser.add_argument_group(bold('Options'))
-    options.add_argument('-h', '--help', action='help', help='Show this help message and exit')
-    options.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}')
+                             type=check_equal_length)
+    other_options = parser.add_argument_group(bold("Other options"))
+    other_options.add_argument('-h', '--help', action='help', help='Show this help message and exit')
+    other_options.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}',
+                               help='Show version number and exit')
     if len(a) == 0:
         parser.print_help(sys.stderr)
         sys.exit(1)

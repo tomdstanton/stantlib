@@ -330,8 +330,8 @@ def parse_args(a):
         epilog=f'Author: {__author__}\tEmail: {__author_email__}\tLicense: {__license__}\tVersion: {__version__}')
 
     positionals = parser.add_argument_group(bold('Input'), "Breaks are relative to the reference")
-    positionals.add_argument('reference', metavar="<gbk>", default=sys.stdin, nargs="?",
-                             help='Path to genbank file (default: stdin)', type=argparse.FileType('rt'))
+    positionals.add_argument('reference', default=sys.stdin, nargs="?",
+                             help='Genbank file or - for stdin (default: stdin)', type=argparse.FileType('rt'))
     positionals.add_argument('assembly', help='Path to the (broken) assembly', metavar="<fasta>",
                              type=lambda x: check_file(x))
 

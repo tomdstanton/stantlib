@@ -118,16 +118,13 @@ def parse_args(a):
         add_help=False, usage='%(prog)s <fastq1> <fastq2> [options]',
         epilog=f'Author: {__author__}\tEmail: {__author_email__}\tLicense: {__license__}\tVersion: {__version__}')
     positionals = parser.add_argument_group(bold('Input'))
-    positionals.add_argument('fastq1', help='Fastq file', type=lambda x: FastqFile.from_path(x))
-    positionals.add_argument('fastq2', help='Fastq file', type=lambda x: FastqFile.from_path(x))
-    options = parser.add_argument_group(bold('Options'))
+    positionals.add_argument('fastq1', help='Path to fastq(.gz) file', type=FastqFile.from_path)
+    positionals.add_argument('fastq2', help='Path to fastq(.gz) file', type=FastqFile.from_path)
+    options = parser.add_argument_group(bold('Other options'))
     options.add_argument('-o', '--output', help='Output path for cleaned reads (default: %(default)s)',
                          metavar="", type=Path, default=Path.cwd())
     options.add_argument('-h', '--help', action='help', help='Show this help message and exit')
     options.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}')
-    if len(a) < 2:
-        parser.print_help(sys.stderr)
-        sys.exit(1)
     return parser.parse_args(a)
 
 
