@@ -210,5 +210,11 @@ if __name__ == '__main__':
     log(f"Running streme with seed {seed}")
     out, err = Popen(f"streme --seed {seed} --thresh {args.pvalue} --p {enrichment_fasta} --oc {args.outdir}".split(), stdout=PIPE, stderr=PIPE).communicate()
     url = check_file(args.outdir / "streme.html")
-    call(["open", url.as_uri()])
+    try:  # should work on Windows
+        os.startfile(url.as_uri())
+    except AttributeError:
+        try:  # should work on MacOS and most linux versions
+            call(['open', url.as_uri()])
+        except Exception as e:
+            warning('Could not open html, try opening manually')
     log("Done!")
