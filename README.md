@@ -1,7 +1,7 @@
 # stantlib :toolbox: :microbe: :dna:
 _Tom's toolbox for microbial sequence analysis_
 
-## Installation
+## Installation :wrench:
 Currently, there is no installation script. To use the toolbox, you need to clone the repository and add the path to 
 your `PYTHONPATH` environment variable. For example, if you cloned the repository to `~/stantlib`, you would add the 
 following line to your `~/.bashrc` file:
@@ -10,7 +10,7 @@ following line to your `~/.bashrc` file:
 export PYTHONPATH=$PYTHONPATH:~/stantlib
 ```
 
-## Overview
+## Overview :mag:
 This repository contains a collection of scripts and tools I use for microbial sequence analysis. Where possible
 I've written them in pure-Python which makes them fast and easy to use, but I've had to use dependencies for some
 such as BioPython for parsing GenBank files :sweat:.
@@ -41,7 +41,7 @@ small/medium genome assembly fasta files, in which case it is seems to be faster
 - `xccessions.py` - Create a regex from fixed-length accession numbers. This is useful for filtering sequences by
 a header regex.
 
-## Dependencies
+## Dependencies :package:
 - Most of these tools require Python >= 3.8, and generally any Python version below this is not supported.
 - Some scripts require `BioPython` which can be installed with `pip install biopython` or `conda install -c conda-forge
 biopython`. 
