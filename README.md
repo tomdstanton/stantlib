@@ -1,7 +1,7 @@
 # stantlib :toolbox: :microbe: :dna:
 _Tom's toolbox for microbial sequence analysis_
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.8300404.svg)](https://doi.org/10.5281/zenodo.8300404)
+ [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.8300404.svg)](https://doi.org/10.5281/zenodo.8300404)
 
 ## Installation :wrench:
 Currently, there is no installation script. To use the toolbox, you need to clone the repository and add the path to 
