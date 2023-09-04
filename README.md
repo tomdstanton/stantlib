@@ -160,6 +160,14 @@ chr	389750	390250	entropy_hotspot	1.88	CDS	390088	390517		CKEIMB_01775	pilus ass
 ```shell
 # Compare a genome assembled from Illumina reads to a reference genome and report incomplete/missing CDS
 $ gene_breaks.py completed_genome.gbff illumina_assembly.fasta --feature_type CDS | head
+reference	reference_start	reference_end	contig	contig_start	contig_end	feature_type	feature_start	feature_end	feature_name	feature_locus_tag	feature_description
+contig_1	1030282	1231824	5	8	201426	CDS	1029194	1030379	tuf	OAFDHN_05205	elongation factor Tu
+contig_1	4958761	5153929	6	112	195179	CDS	4958460	4960620		OAFDHN_23805	Polysaccharide biosynthesis tyrosine autokinase
+contig_1	4231604	4413295	7	3	181694	CDS	4231426	4232371	araC	OAFDHN_20265	Rhamnose utilization AraC family transcriptional regulator
+contig_1	696620	863324	8	0	166704	CDS	696289	696883		OAFDHN_03405	Lipoprotein
+contig_1	257038	415548	10	53	158563	CDS	415288	415987		OAFDHN_02010	ABC transporter permease
+contig_1	4481764	4616495	12	346	135077	CDS	4481517	4482063		OAFDHN_21530	Thiolase-N domain-containing protein
+contig_1	863468	998040	13	1	134457	CDS	863432	863897		OAFDHN_04270	OB-fold putative lipoprotein
 ```
 
 ### xccessions :name_badge:
