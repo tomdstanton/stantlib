@@ -55,17 +55,16 @@ def quit_with_error(message: str):
 
 def parse_args(a):
     parser = argparse.ArgumentParser(
-        description=bold(__description__), add_help=False, usage=f'%(prog)s <genbank> [options]',
+        description=bold(__description__), add_help=False, usage=f'%(prog)s <genbank> [options] > output.fa',
         epilog=f'Author: {__author__}\tEmail: {__author_email__}\tLicense: {__license__}\tVersion: {__version__}')
 
     positionals = parser.add_argument_group(bold('Input'))
-    positionals.add_argument('genbank', default='-', nargs="?",
-                             help='Genbank file or - for stdin (default: stdin)', type=argparse.FileType('rt'))
+    positionals.add_argument('genbank', help='Genbank file or - for stdin', type=argparse.FileType('rt'))
 
     record_options = parser.add_argument_group(bold("Records"))
     record_options.add_argument('-r', '--record', default='locus', choices=['locus', 'feature'],
                                 help='Extract the sequence from each locus or feature (default: locus)', metavar='')
-    record_options.add_argument('-f', '--feature-type', default='CDS', metavar='',
+    record_options.add_argument('-f', '--feature_type', default='CDS', metavar='',
                                 help='If --record=feature, which feature type to extract (default: CDS)')
     record_options.add_argument('-i', '--identifier', default='locus_tag', metavar='',
                                 help='If --record=feature, which qualifier to use as the >id (default: locus_tag)')
@@ -87,6 +86,9 @@ def parse_args(a):
     other_options.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}',
                                help='Show version number and exit')
 
+    if len(a) < 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
     return parser.parse_args(a)
 
 

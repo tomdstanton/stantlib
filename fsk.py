@@ -621,46 +621,48 @@ def translate(sequence: str, table: dict[str: str], stop_symbol: str = '*', to_s
 
 def parse_args(a):
     parser = argparse.ArgumentParser(
-        add_help=False,
-        description=__description__, usage='%(prog)s [options] <fasta>', formatter_class=argparse.RawTextHelpFormatter,
+        add_help=False, formatter_class=argparse.RawTextHelpFormatter,
+        description=bold(__description__), usage='%(prog)s <fasta> [options] > out.fa',
         epilog=f'Author: {__author__}\tEmail: {__author_email__}\tLicense: {__license__}\tVersion: {__version__}')
 
-    positionals = parser.add_argument_group(bold("Input"), "Passing no options will simply flatten your fasta file")
-    positionals.add_argument('fasta', type=argparse.FileType('rt'), default='-',
-                             help="Fasta file or - for stdin (default: stdin)", nargs="?")
+    opts = parser.add_argument_group(bold("Input"), "Passing no options will simply flatten your fasta file")
+    opts.add_argument('fasta', type=argparse.FileType('rt'), help="Fasta file or - for stdin")
 
-    filter_options = parser.add_argument_group(
+    opts = parser.add_argument_group(
         bold("Filtering"), "Note, if --no_description is specified, the header will only contain the accession")
-    filter_options.add_argument('-r', '--regex', type=re.compile, help="Regex pattern to search header",
-                                metavar='')
-    filter_options.add_argument('-d', '--deduplicate', action='store_true',
-                                help="Deduplicate sequences by header")
+    opts.add_argument('-r', '--regex', type=re.compile, help="Regex pattern to search header",
+                      metavar='')
+    opts.add_argument('-d', '--deduplicate', action='store_true',
+                      help="Deduplicate sequences by header")
 
-    format_options = parser.add_argument_group(bold("Formatting"))
-    format_options.add_argument('-n', '--no_description', action='store_true',
-                                help="Suppress description in headers")
-    format_options.add_argument('-c', '--clean', action='store_true',
-                                help="Remove invalid characters from sequence")
-    format_options.add_argument('-u', '--upper', action='store_true',
-                                help="Convert sequence to uppercase, incompatible with --lower")
-    format_options.add_argument('-l', '--lower', action='store_true',
-                                help="Convert sequence to lowercase, incompatible with --upper")
+    opts = parser.add_argument_group(bold("Formatting"))
+    opts.add_argument('-n', '--no_description', action='store_true',
+                      help="Suppress description in headers")
+    opts.add_argument('-c', '--clean', action='store_true',
+                      help="Remove invalid characters from sequence")
+    opts.add_argument('-u', '--upper', action='store_true',
+                      help="Convert sequence to uppercase, incompatible with --lower")
+    opts.add_argument('-l', '--lower', action='store_true',
+                      help="Convert sequence to lowercase, incompatible with --upper")
 
-    translate_options = parser.add_argument_group(bold("Translation"))
+    opts = parser.add_argument_group(bold("Translation"))
 
-    translate_options.add_argument('-t', '--translate', action='store_true', help="Translate sequences to protein")
-    translate_options.add_argument('-s', '--stop_symbol', default='*', help="End symbol for translation (default: *)",
-                                   metavar='', type=str)
-    translate_options.add_argument('-S', '--to_stop', action='store_true',
-                                   help="Translate to stop codon")
-    translate_options.add_argument('-T', '--table', default=1, help="Translation table (default: 1)",
-                                   type=int, metavar='')
+    opts.add_argument('-t', '--translate', action='store_true', help="Translate sequences to protein")
+    opts.add_argument('-s', '--stop_symbol', default='*', help="End symbol for translation (default: *)",
+                      metavar='', type=str)
+    opts.add_argument('-S', '--to_stop', action='store_true',
+                      help="Translate to stop codon")
+    opts.add_argument('-T', '--table', default=1, help="Translation table (default: 1)",
+                      type=int, metavar='')
 
-    other_options = parser.add_argument_group(bold("Other options"))
-    other_options.add_argument('-h', '--help', action='help', help='Show this help message and exit')
-    other_options.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}',
-                         help='Show version number and exit')
+    opts = parser.add_argument_group(bold("Other options"))
+    opts.add_argument('-h', '--help', action='help', help='Show this help message and exit')
+    opts.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}',
+                      help='Show version number and exit')
 
+    if len(a) < 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
     return parser.parse_args(a)
 
 

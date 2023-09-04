@@ -60,6 +60,16 @@ def quit_with_error(message: str):
     sys.exit(1)
 
 
+def check_cpus(cpus: int | str) -> int:
+    try:
+        cpus = int(cpus)
+    except ValueError:
+        quit_with_error(f"CPUs must be an integer, got {cpus}")
+    if cpus < 1:
+        quit_with_error(f"CPUs must be > 0, got {cpus}")
+    return min(cpus, os.cpu_count())
+
+
 def check_programs(progs: list[str], verbose: bool = False):
     """Check if programs are installed and executable"""
     bins = {  # Adapted from: https://unix.stackexchange.com/a/261971/375975
@@ -75,8 +85,9 @@ def check_programs(progs: list[str], verbose: bool = False):
             quit_with_error(f'{program} not found')
 
 
-def check_file(file: str) -> Path:
-    if not (file := Path(file)).is_file():
+def check_file(file: str | Path) -> Path:
+    file = Path(file) if isinstance(file, str) else file
+    if not file.is_file():
         quit_with_error(f'{file.name} is not a file')
     elif file.stat().st_size == 0:
         quit_with_error(f'{file.name} is empty')
@@ -325,77 +336,81 @@ class Alignment:
 
 def parse_args(a):
     parser = argparse.ArgumentParser(
-        description=__description__, formatter_class=argparse.RawTextHelpFormatter,
-        add_help=False, usage='%(prog)s <reference> <assembly> [options]',
+        description=bold(__description__), formatter_class=argparse.RawTextHelpFormatter,
+        add_help=False, usage='%(prog)s <reference> <assembly> [options] > out.tab',
         epilog=f'Author: {__author__}\tEmail: {__author_email__}\tLicense: {__license__}\tVersion: {__version__}')
 
-    positionals = parser.add_argument_group(bold('Input'), "Breaks are relative to the reference")
-    positionals.add_argument('reference', default=sys.stdin, nargs="?",
-                             help='Genbank file or - for stdin (default: stdin)', type=argparse.FileType('rt'))
-    positionals.add_argument('assembly', help='Path to the (broken) assembly', metavar="<fasta>",
-                             type=lambda x: check_file(x))
+    opts = parser.add_argument_group(bold('Input'), "Breaks are relative to the reference")
+    opts.add_argument('reference', help='Genbank file or - for stdin', type=argparse.FileType('rt'))
+    opts.add_argument('assembly', help='Path to the (broken) assembly', type=check_file)
 
-    options = parser.add_argument_group(bold('Options'))
-    options.add_argument('--preset', help='Minimap2 preset (default: %(default)s)', metavar="",
-                         default='asm20', choices=['asm5', 'asm10', 'asm20', 'map-ont', 'ava-ont', 'splice'])
-    options.add_argument('-m', '--merge', metavar="", default=100, type=int,
-                         help='Range merge tolerance (default: %(default)s)')
-    options.add_argument('-f', '--feature', metavar="", default="CDS", type=str,
-                         help='Feature type to report (default: %(default)s)')
-    options.add_argument('-t', '--threads', help='Number of threads to use (default: %(default)s)',
-                         metavar="", default=(p := os.cpu_count()), type=lambda x: min(x, p))
-    options.add_argument('-h', '--help', action='help', help='Show this help message and exit')
-    options.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}')
+    opts = parser.add_argument_group(bold('Options'))
+    opts.add_argument('--preset', help='Minimap2 preset (default: %(default)s)', metavar="",
+                      default='asm20', choices=['asm5', 'asm10', 'asm20', 'map-ont', 'ava-ont', 'splice'])
+    opts.add_argument('-m', '--merge', metavar="", default=100, type=int,
+                      help='Range merge tolerance (default: %(default)s)')
+    opts.add_argument('-f', '--feature_type', metavar="", default="CDS", type=str,
+                      help='Feature type to report (default: %(default)s)')
+    opts.add_argument('-t', '--threads', help='Number of threads to use (default: %(default)s)',
+                      metavar="", default=os.cpu_count(), type=check_cpus)
+    opts.add_argument('-s', '--suppress_header', action='store_true',
+                      help='Suppress header in tab-delimited output')
+    opts.add_argument('-h', '--help', action='help', help='Show this help message and exit')
+    opts.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}',
+                      help='Show program version and exit')
+
+    if len(a) < 2:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
     return parser.parse_args(a)
 
 
-def get_feature_name(feature: 'SeqFeature') -> str:
-    if "gene" in feature.qualifiers:
-        return feature.qualifiers["gene"][0]
-    elif "locus_tag" in feature.qualifiers:
-        return feature.qualifiers["locus_tag"][0]
-    elif feature.id is not None:
-        return feature.id
-    else:
-        return "Unknown feature"
-
-
-def main():
+if __name__ == "__main__":
     args = parse_args(sys.argv[1:])
     check_programs(['minimap2'])
-
+    header_printed = args.suppress_header
     for r in SeqIO.parse(args.reference, 'genbank'):
-        # Align the bad assembly to the reference sequence
+        log(f"Processing {r.id}...")
+        # Align the bad assembly to the reference sequence and cull conflicting alignments
         alignments = cull_all_conflicting_alignments(
             minimap2(args.assembly, f'>{r.id}\n{r.seq}\n', preset=args.preset, threads=args.threads))
         if not alignments:
             warning(f"No alignments found between {args.assembly} and {r.id}")
             continue
 
+        if not header_printed:
+            sys.stdout.write(
+                f"reference\treference_start\treference_end\tcontig\tcontig_start\tcontig_end\tfeature_type\t"
+                f"feature_start\tfeature_end\tfeature_name\tfeature_locus_tag\tfeature_description\n"
+            )
+            header_printed = True
+
         for a in alignments:
             for f in r.features:
-                if f.type == args.feature:
+                if f.type == args.feature_type:
                     # Check if feature is within the alignment, if so remove it from features
                     if a.target_start <= f.location.start <= f.location.end <= a.target_end:
                         r.features.remove(f)
                     # Check if feature overlaps with the alignment, if so print it
                     elif range_overlap((a.target_start, a.target_end), (f.location.start, f.location.end)) > 0:
-                        a_string = f"{a.target_name}\t{a.target_start}\t{a.target_end}\t{a.query_name}\t{a.query_start}\t{a.query_end}"
-                        f_name = get_feature_name(f)
-                        f_description = f.qualifiers['product'][0] if 'product' in f.qualifiers else ''
-                        f_string = f"{f.type}\t{f.location.start}\t{f.location.end}\t{f_name}\t{f_description}"
-                        print(f"{a_string}\t{f_string}")
+                        name = f.qualifiers.get('gene', [''])[0]
+                        locus_tag = f.qualifiers.get('locus_tag', [''])[0]
+                        desc = f.qualifiers.get('product', [''])[0]
+                        sys.stdout.write(
+                            f"{a.target_name}\t{a.target_start}\t{a.target_end}\t{a.query_name}\t{a.query_start}\t"
+                            f"{a.query_end}\t{f.type}\t{f.location.start}\t{f.location.end}\t{name}\t{locus_tag}\t{desc}\n"
+                        )
                         r.features.remove(f)
 
         # remaining features are those that are not in the alignment
         for f in r.features:
-            if f.type == args.feature:
-                a_string = f"{r.id}\t\t\t\t\t"
-                f_name = get_feature_name(f)
-                f_description = f.qualifiers['product'][0] if 'product' in f.qualifiers else ''
-                f_string = f"{f.type}\t{f.location.start}\t{f.location.end}\t{f_name}\t{f_description}"
-                print(f"{a_string}\t{f_string}")
+            if f.type == args.feature_type:
+                name = f.qualifiers.get('gene', [''])[0]
+                locus_tag = f.qualifiers.get('locus_tag', [''])[0]
+                desc = f.qualifiers.get('product', [''])[0]
+                sys.stdout.write(
+                    f"{r.id}\tgene_missing\tgene_missing\tgene_missing\tgene_missing\tgene_missing\t{f.type}\t"
+                    f"{f.location.start}\t{f.location.end}\t{name}\t{locus_tag}\t{desc}\n"
+                )
 
-
-if __name__ == '__main__':
-    main()
+    log("Done!")

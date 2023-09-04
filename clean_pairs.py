@@ -114,42 +114,43 @@ def get_headers(path: Path, compressed: bool = False) -> set[bytes]:
 
 def parse_args(a):
     parser = argparse.ArgumentParser(
-        description=__description__, formatter_class=argparse.RawTextHelpFormatter,
+        description=bold(__description__), formatter_class=argparse.RawTextHelpFormatter,
         add_help=False, usage='%(prog)s <fastq1> <fastq2> [options]',
         epilog=f'Author: {__author__}\tEmail: {__author_email__}\tLicense: {__license__}\tVersion: {__version__}')
-    positionals = parser.add_argument_group(bold('Input'))
-    positionals.add_argument('fastq1', help='Path to fastq(.gz) file', type=FastqFile.from_path)
-    positionals.add_argument('fastq2', help='Path to fastq(.gz) file', type=FastqFile.from_path)
-    options = parser.add_argument_group(bold('Other options'))
-    options.add_argument('-o', '--output', help='Output path for cleaned reads (default: %(default)s)',
-                         metavar="", type=Path, default=Path.cwd())
-    options.add_argument('-h', '--help', action='help', help='Show this help message and exit')
-    options.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}')
+    opts = parser.add_argument_group(bold('Input'))
+    opts.add_argument('fastq1', help='Path to fastq(.gz) file', type=FastqFile.from_path)
+    opts.add_argument('fastq2', help='Path to fastq(.gz) file', type=FastqFile.from_path)
+    opts = parser.add_argument_group(bold('Other options'))
+    opts.add_argument('-o', '--output', help='Output path for cleaned reads (default: %(default)s)',
+                      metavar="", type=Path, default=Path.cwd())
+    opts.add_argument('-h', '--help', action='help', help='Show this help message and exit')
+    opts.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}',
+                      help='Show program version and exit')
+
+    if len(a) < 2:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
     return parser.parse_args(a)
 
 
-def main():
+if __name__ == '__main__':
     args = parse_args(sys.argv[1:])
-
     # Init the headers set with the headers from the first file
     log(f"Reading headers from {args.fastq1.path.name}")
-    fastq1_headers = get_headers(args.fastq1.path, args.fastq1.compressed)
-    headers_intersection = set()
     # We need to parse over the first file twice, but only parse over the second file once
+    fastq1_headers = get_headers(args.fastq1.path, args.fastq1.compressed)
+    headers_intersection = set()  # Init the header intersection set
     # We can use the headers from the second file to filter the set and filter the second file at the same time
-
     log(f"Filtering {args.fastq2.path.name}")
     with open(args.output / f"{args.fastq2}_cleaned{args.fastq2.extension}", 'wb') as output:
         for record in args.fastq2:
             if (header := record[0].split(b' ', 1)[0]) in fastq1_headers:
                 output.write(b''.join(record))
                 headers_intersection.add(header)
-
     if not headers_intersection:
         quit_with_error("No headers in common between the two files")
-
     log(f"Found {len(headers_intersection)} headers in common")
-
+    # Filter the first file using the intersection set
     log(f"Filtering {args.fastq1.path.name}")
     with open(args.output / f"{args.fastq1}_cleaned{args.fastq1.extension}", 'wb') as output:
         for record in args.fastq1:
@@ -158,7 +159,3 @@ def main():
                 headers_intersection.remove(header)
 
     log("Done!")
-
-
-if __name__ == '__main__':
-    main()

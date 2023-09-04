@@ -102,7 +102,7 @@ def check_dir(path: str | Path) -> Path:
 
 def parse_args(a):
     parser = argparse.ArgumentParser(
-        description=__description__, formatter_class=argparse.RawTextHelpFormatter,
+        description=bold(__description__), formatter_class=argparse.RawTextHelpFormatter,
         add_help=False, usage='%(prog)s <genbank1> <genbank2> ... <genbankN> <gene> [options]',
         epilog=f'Author: {__author__}\tEmail: {__author_email__}\tLicense: {__license__}\tVersion: {__version__}')
 
@@ -113,7 +113,7 @@ def parse_args(a):
     enrichment_options = parser.add_argument_group(bold('Enrichment options'))
     enrichment_options.add_argument('-u', '--upstream', metavar="", default=300, type=int,
                                     help='Length of upstream region to enrich TFBS (default: %(default)s)')
-    enrichment_options.add_argument('-f', '--feature', metavar="", default="CDS", type=str,
+    enrichment_options.add_argument('-f', '--feature_type', metavar="", default="CDS", type=str,
                                     help='Feature type to search (default: %(default)s)')
     enrichment_options.add_argument('--allowed_genes', metavar="", default=1, type=int,
                                     help='Number of genes per genome for TFBS enrichment (default: %(default)s)')
@@ -130,7 +130,9 @@ def parse_args(a):
 
     options = parser.add_argument_group(bold('Other options'))
     options.add_argument('-h', '--help', action='help', help='Show this help message and exit')
-    options.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}')
+    options.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}',
+                         help='Show program version and exit')
+
     if len(a) < 2:
         parser.print_help(file=sys.stderr)
         sys.exit(1)
@@ -199,7 +201,7 @@ if __name__ == '__main__':
     args = parse_args(sys.argv[1:])
 
     enrichment_sequences = ''.join(
-        extract_enrichment_sequences(g, args.gene, args.feature, args.upstream, args.allowed_genes,
+        extract_enrichment_sequences(g, args.gene, args.feature_type, args.upstream, args.allowed_genes,
                                      args.allow_collision, args.allow_clip) for g in args.genbank)
     if not enrichment_sequences:
         quit_with_error("No enrichment sequences found")

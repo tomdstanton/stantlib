@@ -11,6 +11,7 @@ __version__ = '0.0.1b'
 import sys
 import argparse
 import gzip
+import math
 from typing import Generator, Iterable
 import itertools
 from pathlib import Path
@@ -96,20 +97,18 @@ def count_gc(seq: bytes) -> float:
     return (seq.count(b'G') + seq.count(b'C')) / len(seq)
 
 
-def get_stats(floats: Iterable[float]) -> tuple[int, float, float]:
+def get_stats(floats: list[float]) -> tuple[int, float, float]:
     """Returns mean and standard deviation of an iterable of floats
     Tries to iterate over the floats once"""
     log("Calculating GC content stats")
-    count, mean, M2 = 0, 0, 0
-    for x in floats:
-        count += 1
-        delta = x - mean
-        mean += delta / count
-        M2 += delta * (x - mean)
-    if count < 2:
-        quit_with_error("Not enough reads to calculate stats")
-    else:
-        return count, mean, (M2 / (count - 1)) ** 0.5
+    if not floats:
+        quit_with_error("No data to calculate stats")
+    elif len(floats) == 1:
+        if count < 2:
+            quit_with_error("Not enough reads to calculate stats")
+    mean = sum(floats) / len(floats)
+    std = math.sqrt(sum((x - mean) ** 2 for x in floats) / len(floats))
+    return len(floats), mean, std
 
 
 def draw_hist(data: Iterable[float], num_bins: int = 100, value_range: tuple[float, float] = (0, 1)):
@@ -140,34 +139,38 @@ def draw_hist(data: Iterable[float], num_bins: int = 100, value_range: tuple[flo
 
 def parse_args(a):
     parser = argparse.ArgumentParser(
-        description=__description__, formatter_class=argparse.RawTextHelpFormatter, add_help=False,
+        description=bold(__description__), formatter_class=argparse.RawTextHelpFormatter, add_help=False,
         usage='%(prog)s <fastq> [options]',
         epilog=f'Author: {__author__}\tEmail: {__author_email__}\tLicense: {__license__}\tVersion: {__version__}')
-    positionals = parser.add_argument_group(bold('Input'))
-    positionals.add_argument('fastq', help='Path to fastq(.gz) file or - for stdin', nargs='?', default='-')
+    opts = parser.add_argument_group(bold('Input'))
+    opts.add_argument('fastq', help='Path to fastq(.gz) file or - for stdin', type=str)
 
-    filtering_options = parser.add_argument_group(
+    opts = parser.add_argument_group(
         bold('Filtering'),
         "If --lower and --upper are not specified, zscore will be used to determine the cutoffs\n"
         "Note, this takes longer as stats must be calculated first")
-    filtering_options.add_argument('-z', '--zscore', metavar="", default=3, type=float,
-                                   help='Z-score threshold (default: %(default)s)')
-    filtering_options.add_argument('-u', '--upper', type=float, default=1.0, metavar="",
-                                   help='Upper GC content cutoff as float (default: %(default)s)')
-    filtering_options.add_argument('-l', '--lower', type=float, default=0.0, metavar="",
-                                   help='Lower GC content cutoff as float (default: %(default)s)')
-    filtering_options.add_argument('-r', '--reverse', action='store_true', help='Reverse filter')
+    opts.add_argument('-z', '--zscore', metavar="", default=2, type=float,
+                      help='Z-score threshold (default: %(default)s)')
+    opts.add_argument('-u', '--upper', type=float, default=1.0, metavar="",
+                      help='Upper GC content cutoff as float (default: %(default)s)')
+    opts.add_argument('-l', '--lower', type=float, default=0.0, metavar="",
+                      help='Lower GC content cutoff as float (default: %(default)s)')
+    opts.add_argument('-r', '--reverse', action='store_true', help='Reverse filter')
 
-    mode_options = parser.add_argument_group(bold('Mode'))
-    mode_options.add_argument('-s', '--stats', action='store_true', help='Print stats and exit')
-    mode_options.add_argument('-p', '--print', action='store_true', help='Print the GC of each read and exit')
-    mode_options.add_argument('-d', '--draw', nargs="?", const=100, default=None, type=int, metavar="",
-                              help='Draw a histogram of read GC and exit\n'
-                                   'Providing an int will change binwidth (default: %(const)s)')
+    opts = parser.add_argument_group(bold('Mode'))
+    opts.add_argument('-s', '--stats', action='store_true', help='Print stats and exit')
+    opts.add_argument('-p', '--print', action='store_true', help='Print the GC of each read and exit')
+    opts.add_argument('-d', '--draw', nargs="?", const=100, default=None, type=int, metavar="",
+                      help='Draw a histogram of read GC and exit\n'
+                           'Providing an int will change binwidth (default: %(const)s)')
 
-    other_options = parser.add_argument_group(bold('Other options'))
-    other_options.add_argument('-h', '--help', action='help', help='Show this help message and exit')
-    other_options.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}')
+    opts = parser.add_argument_group(bold('Other options'))
+    opts.add_argument('-h', '--help', action='help', help='Show this help message and exit')
+    opts.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}',
+                      help='Show program version and exit')
+    if len(a) < 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
     return parser.parse_args(a)
 
 
@@ -200,8 +203,8 @@ if __name__ == '__main__':
                 f.write(b'\n'.join(record) + b'\n')
                 gc.append(count_gc(record[1]))
         _, mean, std = get_stats(gc)
-        args.lower = mean - args.zscore * std
-        args.upper = mean + args.zscore * std
+        args.lower = mean - (std * args.zscore)
+        args.upper = mean + (std * args.zscore)
         args.fastq = tempfile.name
 
     if args.lower > args.upper:

@@ -8,11 +8,12 @@ __description__ = 'Filter a Genbank file by slicing or searching records and fea
 __license__ = 'gpl-3.0'
 __version__ = '0.0.1b'
 
-from Bio import SeqIO
 import argparse
 import sys
 import re
 import datetime
+
+from Bio import SeqIO
 
 END_FORMATTING = '\033[0m'
 BOLD = '\033[1m'
@@ -88,28 +89,33 @@ def merge_ranges(ranges: list[tuple[int, int]], tolerance=0) -> list[tuple[int, 
 
 def parse_args(a):
     parser = argparse.ArgumentParser(
-        description=bold(__description__), add_help=False, usage=f'%(prog)s <genbank> [filter] [options]',
+        description=bold(__description__), add_help=False,
+        usage='%(prog)s <genbank> [filter] [options] > out.{gbk,fa}',
         epilog=f'Author: {__author__}\tEmail: {__author_email__}\tLicense: {__license__}\tVersion: {__version__}')
 
-    positionals = parser.add_argument_group(bold('Input'))
-    positionals.add_argument('genbank', default='-', nargs="?",
-                             help='Genbank file or - for stdin (default: stdin)', type=argparse.FileType('rt'))
+    opts = parser.add_argument_group(bold('Input'))
+    opts.add_argument('genbank', help='Genbank file or - for stdin', type=argparse.FileType('rt'))
 
-    filter_args = parser.add_mutually_exclusive_group(required=True)
-    filter_args.add_argument('-s', '--slice', metavar="", nargs="+", type=check_slice, default=[],
-                             help='Slices each record by ranges given in format start:end')
-    filter_args.add_argument('-f', '--feature', metavar="", type=lambda x: re.compile(x),
-                             help="Filter by features matching regex pattern")
-    filter_args.add_argument('-r', '--record', metavar="", type=lambda x: re.compile(x),
-                             help="Filter by records matching regex pattern")
+    opts = parser.add_mutually_exclusive_group(required=True)
+    opts.add_argument('-s', '--slice', metavar="", nargs="+", type=check_slice, default=[],
+                      help='Slices each record by ranges given in format start:end')
+    opts.add_argument('-f', '--feature', metavar="", type=lambda x: re.compile(x),
+                      help="Filter by features matching regex pattern")
+    opts.add_argument('-r', '--record', metavar="", type=lambda x: re.compile(x),
+                      help="Filter by records matching regex pattern")
 
-    options = parser.add_argument_group(bold('Other options'))
-    options.add_argument('-o', '--outfmt', choices=['genbank', 'fasta'], default='genbank', metavar="",
-                         help='Output either genbank or fasta format')
-    options.add_argument('-m', '--merge', type=int, default=0, metavar="",
-                         help='Merge slice ranges within this distance, (default: 0)')
-    options.add_argument('-h', '--help', action='help', help='Show this help message and exit')
-    options.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}')
+    opts = parser.add_argument_group(bold('Other options'))
+    opts.add_argument('-o', '--outfmt', choices=['genbank', 'fasta'], default='genbank', metavar="",
+                      help='Output either genbank or fasta format')
+    opts.add_argument('-m', '--merge', type=int, default=0, metavar="",
+                      help='Merge slice ranges within this distance, (default: 0)')
+    opts.add_argument('-h', '--help', action='help', help='Show this help message and exit')
+    opts.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}',
+                      help='Show program version and exit')
+
+    if len(a) < 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
     return parser.parse_args(a)
 
 

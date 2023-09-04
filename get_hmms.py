@@ -1,195 +1,220 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 __author__ = 'Tom Stanton'
 __title__ = 'Get HMMs'
 __author_email__ = 'tomdstanton@gmail.com'
-__description__ = 'Download HMMs from public databases with accessions'
+__description__ = 'Download Hidden-Markov/Covariance models from public databases with accessions'
 __license__ = 'gpl-3.0'
-__version__ = '0.0.1'
+__version__ = '0.0.1b'
 
-# ................ Python Imports ................ #
 from pathlib import Path
 import requests
-from requests.exceptions import HTTPError
+from zlib import decompress, MAX_WBITS
+import datetime
 import sys
-from argparse import RawTextHelpFormatter, ArgumentParser
-import logging
-from io import BytesIO
-import multiprocessing.pool
-from time import sleep
-# ................ Dependency Imports ................ #
-import pyhmmer
-# ................ Globals ................ #
-LOGGER = logging.getLogger(__name__)  # https://stackoverflow.com/a/45065655/10771025
+from os import cpu_count
+import argparse
+from multiprocessing.dummy import Pool
+
+END_FORMATTING = '\033[0m'
+BOLD = '\033[1m'
+RED = '\033[31m'
+YELLOW = '\033[93m'
+
+
+# Functions --------------------------------------------------------------------
+def bold(text: str):
+    return BOLD + text + END_FORMATTING
+
+
+def bold_red(text: str):
+    return RED + BOLD + text + END_FORMATTING
+
+
+def bold_yellow(text: str):
+    return YELLOW + BOLD + text + END_FORMATTING
+
+
+def warning(text: str):
+    log(bold_yellow(f"WARNING: {text}"))
+
+
+def error(text: str):
+    log(bold_red(f"ERROR: {text}"))
+
+
+def get_timestamp():
+    return '{:%Y-%m-%d %H:%M:%S}'.format(datetime.datetime.now())
+
+
+def log(message: str = '', end: str = '\n', sep: str = ' ', flush: bool = True, file=sys.stderr):
+    print(f"{get_timestamp()}: {message}", file=file, flush=flush, end=end, sep=sep)
+
+
+def quit_with_error(message: str):
+    error(message)
+    sys.exit(1)
+
+
+def download(url: str) -> bytes:
+    hmm_string = b''
+    log(f"Downloading {url}")
+    with requests.get(url, stream=True) as request:
+        if request.status_code == 200:
+            for chunk in request.iter_content(chunk_size=2 ** 20):
+                hmm_string += chunk
+            hmm_string = decompress(hmm_string, wbits=MAX_WBITS | 32) if is_gzipped(hmm_string) else hmm_string
+            return hmm_string
+        else:
+            warning(f"Could not download {url}, status code {request.status_code}")
+    return hmm_string
+
+
+def check_cpus(cpus: int | str) -> int:
+    try:
+        cpus = int(cpus)
+    except ValueError:
+        quit_with_error(f"CPUs must be an integer, got {cpus}")
+    if cpus < 1:
+        quit_with_error(f"CPUs must be > 0, got {cpus}")
+    return min(cpus, cpu_count())
+
+
+def parse_args(a):
+    parser = argparse.ArgumentParser(
+        description=bold(__description__), add_help=False,
+        usage='%(prog)s <accessions> [options]', formatter_class=argparse.RawTextHelpFormatter,
+        epilog=f'Author: {__author__}\tEmail: {__author_email__}\tLicense: {__license__}\tVersion: {__version__}')
+
+    opts = parser.add_argument_group(bold('Input'), """
+Currently supported databases:
+ - PFAM: PF00001
+ - RFAM: RF00001
+ - CDD: cd00001
+ - PANTHER: PTHR00001
+ - TIGRFAM/NCBIFam: TIGR00001 or NF00001
+""")
+    opts.add_argument('accessions', nargs='+', help="HMM/CM accessions to download")
+
+    opts = parser.add_argument_group(bold('Options'))
+    opts.add_argument('-o', '--outdir', default=Path.cwd(), type=Path, metavar='',
+                      help='Output directory (default: cwd)')
+    opts.add_argument('-e', '--extension', default='hmm', type=str, metavar='',
+                      help='HMM/CM file extension (default: hmm)')
+    opts.add_argument('-t', '--threads', default=cpu_count(), type=check_cpus, metavar='',
+                        help='Number of threads to use (default: all available)')
+    opts.add_argument('-h', '--help', action='help', help='Show this help message and exit')
+    opts.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}',
+                      help='Show program version and exit')
+
+    if len(a) < 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
+    return parser.parse_args(a)
+
+
+def tigrfam_version_string(accession, max_version=5) -> list[str]:
+    """
+    Return a list of TIGRFAM version strings for a given accession in descending order from .5 to .1
+    TIGR00190 -> ['TIGR00190.5', 'TIGR00190.4', 'TIGR00190.3', 'TIGR00190.2', 'TIGR00190.1']
+    """
+    accession = accession.split('.')[0] if '.' in accession else accession
+    return [
+        f'https://ftp.ncbi.nlm.nih.gov/hmm/current/hmm_PGAP.HMM/{accession}.{i}.HMM' for i in range(max_version, 0, -1)]
+
+
+def check_file(file: str | Path) -> Path:
+    file = Path(file) if isinstance(file, str) else file
+    if not file.is_file():
+        quit_with_error(f'{file.name} is not a file')
+    elif file.stat().st_size == 0:
+        quit_with_error(f'{file.name} is empty')
+    else:
+        return file.absolute()
+
+
+def is_gzipped(bytes_string: bytes):
+    """
+    Detects gzipped byte-string
+    https://stackoverflow.com/questions/13044562
+    """
+    return any([bytes_string.startswith(i) for i in [b'\x1f', b'\x8b', b'\x08']])
+
+
+def load_accessions(accessions: list[str]) -> list['Accession']:
+    ok_accessions = []
+    for a in accessions:
+        if (a := Accession.from_string(a)).urls:
+            ok_accessions.append(a)
+        else:
+            warning(f"Could not determine database for {a}")
+    if not ok_accessions:
+        quit_with_error("No valid accessions")
+    return ok_accessions
+
+
+def process_accession(acc: 'Accession', outdir: Path = Path.cwd(), extension: str = 'hmm'):
+    for url in acc.urls:
+        if (hmm := download(url)):
+            with open((path := outdir / f"{acc}.{extension}"), 'wb') as f:
+                f.write(hmm)
+            if path.stat().st_size > 0:  # Check file is not empty
+                log(f"Wrote {acc.accession} to {path}")
+                break  # Stop trying URLs if one works
+            else:
+                warning(f"Downloaded {acc.accession} from {url} but file is empty")
+                path.unlink()  # Delete empty file and try next URL
+
+
+def mp_wrapper(arguments):
+    """Wrapper for multiprocessing"""
+    process_accession(*arguments)
+
+
+# Classes ---------------------------------------------------------------------
+class AccessionError(Exception):
+    pass
 
 
 class Accession:
-    def __init__(self, accession: str, out_dir: Path):
-        self.accession = accession.strip()
-        self.db, self.url = determine_db(self.accession)
-        self.out_path = Path(out_dir / self.accession.replace(":", "-"))
-        self.hmm_path = Path(str(self.out_path) + ".hmm")
-        self.hmm = None
+    def __init__(self, accession: str | None = None, db: str | None = None, urls: list[str] | None = None):
+        self.accession = accession or ''
+        self.db = db or ''
+        self.urls = urls or []
+
+    @classmethod
+    def from_string(cls, string: str):
+        self = cls(accession=string.strip())
+        if self.accession.startswith('PF'):
+            self.db = 'PFAM'
+            self.urls.append('https://www.ebi.ac.uk/interpro/wwwapi//entry/pfam/{self.accession}?annotation=hmm')
+        elif self.accession.startswith('RF'):
+            self.db = 'RFAM'
+            self.urls.append(f'https://rfam.org/family/{self.accession}/cm')
+        elif self.accession.startswith('cd'):
+            self.db = 'CDD'
+            self.urls.append(f'https://www.ncbi.nlm.nih.gov/Structure/cdd/cddsrv.cgi?uid={self.accession}&seqout')
+        elif self.accession.startswith('PTHR'):
+            self.db = 'PANTHER'
+            self.urls.append(f'http://www.pantherdb.org/panther/exportHmm.jsp?acc={self.accession}')
+        elif self.accession.startswith('TIGR') or self.accession.startswith('NF'):
+            self.db = 'TIGRFAM'
+            self.urls += tigrfam_version_string(self.accession)
+        return self
 
     def __repr__(self):
         return self.accession
 
-    def get(self):
-        if self.url:
-            download_string = self.download_hmm()
-            if download_string:
-                self.hmm = self.check_hmm(download_string)
-                if not self.hmm:
-                    LOGGER.warning(format_str(f"Could not generate a proper HMM for {self.accession}", '93'))
-                else:
-                    self.write_hmm()
-
-    def check_hmm(self, download_string: str):
-        LOGGER.info(f"Checking {self.accession}")
-        try:
-            with BytesIO() as fh:
-                fh.write(download_string.encode())
-                fh.seek(0)
-                with pyhmmer.plan7.HMMFile(fh) as hmm_file:
-                    hmm = hmm_file.read()
-
-        except Exception as e:
-            LOGGER.warning(format_str(str(e), '93'))
-            hmm = build_hmm_from_msa(download_string, self.accession)
-        return hmm
-
-    def write_hmm(self):
-        try:
-            with open(self.hmm_path, 'wb') as fh:
-                self.hmm.write(fh)
-        except Exception as e:
-            LOGGER.warning(format_str(str(e), '93'))
-
-        if self.hmm_path.stat().st_size > 0:
-            LOGGER.info(f"HMM successfully written to {self.hmm_path}")
-
-    def download_hmm(self, retries=3):
-        LOGGER.info(f"Downloading {self.accession} from {self.db}")
-        hmm_string = b''
-        for n in range(retries):
-            try:
-                with requests.get(self.url, stream=True) as request:
-                    request.raise_for_status()
-                    for chunk in request.iter_content(chunk_size=2 ** 20):
-                        hmm_string += chunk
-                break
-            except HTTPError as exc:
-                code = exc.response.status_code
-                if code in [429, 500, 502, 503, 504]:
-                    sleep(n)  # retry after n seconds
-                    continue
-                raise
-        if not hmm_string:
-            LOGGER.warning(format_str(f"Failed to download HMM from {self.url}, check accession", '93'))
-            return None
-
-        LOGGER.debug(f"Downloaded {len(hmm_string)} bytes")
-        return hmm_string.decode()
-
-
-def parse_args(arguments):
-    parser = ArgumentParser(formatter_class=RawTextHelpFormatter,
-                            description=__description__)
-    parser.add_argument('search_terms', nargs='+', type=str)
-    parser.add_argument('-o', '--outdir', type=lambda p: check_dir(parser, Path(p).resolve()),
-                        default=Path.cwd(),
-                        help="Directory to save HMMs")
-    return parser.parse_args(arguments)
-
-
-def check_dir(parser: 'argparse.ArgumentParser', dirpath) -> Path:
-    try:
-        dirpath.mkdir(parents=True, exist_ok=True)
-        return dirpath
-    except Exception as e:
-        parser.error(str(e))
-
-
-def build_hmm_from_msa(fasta_string: str, name: str):
-    alphabet = pyhmmer.easel.Alphabet.amino()
-    seqs = []
-
-    fasta_string = "\n".join(
-        [i for i in fasta_string.split('\n') if i[0].upper() in alphabet.symbols + '>']
-    )
-    try:
-        for record in fasta_string.split('\n>'):
-            seqs += [
-                pyhmmer.easel.TextSequence(
-                    name=record.split('\n')[0].split(' ')[0].replace('>', '').encode(),
-                    sequence=''.join(record.split('\n')[1:])
-                )
-            ]
-    except Exception as e:
-        LOGGER.warning(format_str(str(e), '93'))
-        return None
-
-    try:
-        msa = pyhmmer.easel.TextMSA(
-            name=name.encode(),
-            sequences=seqs
-        ).digitize(alphabet)
-        LOGGER.info(f"{name} successfully parsed as alignment")
-    except Exception as e:
-        LOGGER.warning(format_str(str(e), '93'))
-        return None
-
-    try:
-        builder = pyhmmer.plan7.Builder(alphabet)
-        background = pyhmmer.plan7.Background(alphabet)
-        hmm, _, _ = builder.build_msa(msa, background)
-    except Exception as e:
-        LOGGER.warning(format_str(str(e), '93'))
-        return None
-
-    return hmm
-
-
-def determine_db(accession: str):
-    if accession.startswith('PF'):
-        return 'PFAM', f'https://pfam-legacy.xfam.org/family/{accession}/hmm'
-    # elif accession.startswith('RF'):
-    #     return 'RFAM', f'https://rfam.org/family/{accession}/cm'
-    elif accession.startswith('cd'):
-        return 'CDD', f'https://www.ncbi.nlm.nih.gov/Structure/cdd/cddsrv.cgi?uid={accession}&seqout'
-    elif accession.startswith('PTHR'):
-        return 'PANTHER', f'http://www.pantherdb.org/panther/exportHmm.jsp?acc={accession}'
-    elif accession.startswith('TIGR'):
-        return 'TIGRFAM', f'https://ftp.ncbi.nlm.nih.gov/hmm/current/hmm_PGAP.HMM/{accession}.HMM'
-    else:
-        LOGGER.warning(format_str(f"Could not determine database for {accession}", '93'))
-        return None, None
-
-
-def format_str(string: str, format_number: str) -> str:
-    """Add colour to string using a format string number"""
-    return f"\033[{format_number}m{string}\033[0m"
-
-
-def quit_with_error(message: str):
-    """Displays the given message and ends the program's execution."""
-    LOGGER.error(format_str(f"ERROR: {message}", '91'))
-    sys.exit(1)
-
 
 if __name__ == "__main__":
     args = parse_args(sys.argv[1:])
-    line_width = 70  # Nice general terminal width
-    logging.basicConfig(format="[%(asctime)s %(levelname)s %(funcName)s] %(message)s",
-                        datefmt='%H:%M:%S', level=logging.INFO)
-    LOGGER.info(f' {Path(__file__).stem} {__version__} '.center(line_width, '='))
-    LOGGER.info(f'Platform: {sys.platform}')
-    LOGGER.info(f'Python: {".".join([str(i) for i in sys.version_info[:3]])}')
-    LOGGER.info(f'Current working directory: {Path.cwd()}')
+    if len(accessions := load_accessions(args.accessions)) == 1:
+        process_accession(args.accessions[0], args.outdir, args.extension)
+    else:  # Multiple accessions use multiprocessing
+        with Pool(min(len(accessions), args.threads)) as pool:
+            pool.imap_unordered(mp_wrapper, [(a, args.outdir, args.extension) for a in accessions])
+            pool.close()
+            pool.join()
 
-    def f(acc: Accession):
-        return acc.get()
-
-    with multiprocessing.pool.ThreadPool(multiprocessing.cpu_count()) as pool:
-        results = pool.map(f, [Accession(i, args.outdir) for i in args.search_terms])
+    log("Done!")

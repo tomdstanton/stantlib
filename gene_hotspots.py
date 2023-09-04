@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*
+# -*- coding: utf-8 -*-
 
 __author__ = 'Tom Stanton'
 __title__ = 'Gene Hotspots'
@@ -26,6 +26,7 @@ DINUCL_ANGLES = {"AA": 7.6, "CA": 14.6, "AC": 10.9, "CC": 7.2, "AG": 8.8, "CG": 
                  "GA": 8.2, "TA": 25, "GC": 8.9, "TC": 8.2, "GG": 7.2, "TG": 14.6, "GT": 10.9, "TT": 7.6}
 
 
+# Functions -------------------------------------------------------------------
 def bold(text: str):
     return BOLD + text + END_FORMATTING
 
@@ -53,6 +54,9 @@ def quit_with_error(message: str):
 
 def get_windows(seq: list | str | bytes, window_size: int, step_size: int
                 ) -> Generator[tuple[int, int, list | str | bytes], None, None]:
+    """
+    Returns a generator of windows of a given size and step size
+    """
     for start in range(0, len(seq), step_size):
         yield start, (stop := start + window_size), seq[start:stop]
 
@@ -117,16 +121,15 @@ def process_subseq(subseq: str, analysis: str) -> float:
         quit_with_error(f"Unknown analysis: {analysis}")
 
 
-def find_hotspots(windows: dict[tuple[int, int], float], zscore_threshold: float = 2
-                  ) -> Generator[tuple[tuple[int, int], float], None, None]:
+def find_hotspots(windows: dict[tuple[int, int], float], zscore: float) -> Generator[tuple[tuple[int, int], float], None, None]:
     """
     Given a dictionary of windows where keys represent the start and end of the window and the value is a metric
     such as gc content or entropy, find windows where the metric is greater than the zscore threshold.
     """
     # First we need to calculate the mean and standard deviation of the metric
     mean, std = get_stats(windows.values())
-    upper_threshold = mean + (std * zscore_threshold)
-    lower_threshold = mean - (std * zscore_threshold)
+    upper_threshold = mean + (std * zscore)
+    lower_threshold = mean - (std * zscore)
     log(f"mean: {mean:.2f}\tstd: {std:.2f}\tupper_threshold: {upper_threshold:.2f}\tlower_threshold: {lower_threshold:.2f}")
     for k, v in windows.items():
         if v > upper_threshold or v < lower_threshold:
@@ -177,71 +180,74 @@ def range_overlap(range1: tuple[int, int], range2: tuple[int, int], skip_sort: b
 
 def parse_args(a):
     parser = argparse.ArgumentParser(
-        description=__description__, formatter_class=argparse.RawTextHelpFormatter,
-        add_help=False, usage='%(prog)s <gbk> <analysis> [options]',
+        description=bold(__description__), formatter_class=argparse.RawTextHelpFormatter,
+        add_help=False, usage='%(prog)s <genbank> -a analysis [options] > out.tab',
         epilog=f'Author: {__author__}\tEmail: {__author_email__}\tLicense: {__license__}\tVersion: {__version__}')
-    positionals = parser.add_argument_group(bold('Input'))
-    positionals.add_argument('file', metavar="<gbk>", default=sys.stdin, nargs="?",
-                             help='Path to genbank file (default: stdin)', type=argparse.FileType('rt'))
-    options = parser.add_argument_group(bold('Options'))
-    positionals.add_argument('-a', '--analysis', metavar="", default="gc_frac", type=str,
-                             choices=['gc_frac', 'gc_sum', 'gc_skew', 'entropy', 'flexibility'],
-                             help="Analysis to perform (default: %(default)s)\n\tgc_frac: GC fraction\n\tgc_sum: GC sum\n"
-                                  "\tgc_skew: GC skew\n\tentropy: Shannon entropy\n\tflexibility: DNA flexibility")
-    options.add_argument('-w', '--window-size', metavar="", default=500, type=int,
-                         help='Window size (default: %(default)s)')
-    options.add_argument('-s', '--step-size', metavar="", default=250, type=int,
-                         help='Step size (default: %(default)s)')
-    options.add_argument('-z', '--zscore', metavar="", default=3, type=float,
-                         help='Z-score threshold (default: %(default)s)')
-    options.add_argument('-m', '--merge', metavar="", default=100, type=int,
-                         help='Range merge tolerance (default: %(default)s)')
-    options.add_argument('-f', '--feature', metavar="", default="CDS", type=str,
-                         help='Feature type to report (default: %(default)s)')
-    options.add_argument('-h', '--help', action='help', help='Show this help message and exit')
-    options.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}')
-    if len(a) == 0:
+
+    opts = parser.add_argument_group(bold('Input'))
+    opts.add_argument('genbank', help='Genbank file or - for stdin', type=argparse.FileType('rt'))
+
+    opts = parser.add_argument_group(bold('Options'))
+    opts.add_argument('-a', '--analysis', metavar="", default="gc_frac", type=str,
+                      choices=['gc_frac', 'gc_sum', 'gc_skew', 'entropy', 'flexibility'],
+                      help="Analysis to perform (default: %(default)s)\n - gc_frac: GC fraction\n - gc_sum: GC sum\n"
+                           " - gc_skew: GC skew\n - entropy: Shannon entropy\n - flexibility: DNA flexibility")
+    opts.add_argument('-w', '--window-size', metavar="", default=500, type=int,
+                      help='Window size (default: %(default)s)')
+    opts.add_argument('-s', '--step-size', metavar="", default=250, type=int,
+                      help='Step size (default: %(default)s)')
+    opts.add_argument('-z', '--zscore', metavar="", default=3, type=float,
+                      help='Z-score threshold (default: %(default)s)')
+    opts.add_argument('-m', '--merge', metavar="", default=100, type=int,
+                      help='Range merge tolerance (default: %(default)s)')
+    opts.add_argument('-f', '--feature_type', metavar="", default="CDS", type=str,
+                      help='Feature type to report (default: %(default)s)')
+    opts.add_argument('--suppress_header', action='store_true',
+                      help='Suppress header in tab-delimited output')
+    opts.add_argument('-h', '--help', action='help', help='Show this help message and exit')
+    opts.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}',
+                      help='Show program version and exit')
+
+    if len(a) < 1:
         parser.print_help(sys.stderr)
         sys.exit(1)
     return parser.parse_args(a)
 
 
-def get_feature_name(feature: 'SeqFeature') -> str:
-    if "gene" in feature.qualifiers:
-        return feature.qualifiers["gene"][0]
-    elif "locus_tag" in feature.qualifiers:
-        return feature.qualifiers["locus_tag"][0]
-    elif feature.id is not None:
-        return feature.id
-    else:
-        return "Unknown feature"
-
-
-def main():
+if __name__ == '__main__':
     args = parse_args(sys.argv[1:])
-    # args = parse_args(['../Kaptive/testing/ssi_clinopore/K9_medaka_polypolish_polca/K9_medaka_polypolish_polca.gbff', "kmer_freq"])
-    for r in SeqIO.parse(args.file, 'genbank'):
+    header_printed = args.suppress_header
+    for r in SeqIO.parse(args.genbank, 'genbank'):
         # Get window data
         data = {}
         for start, stop, subseq in get_windows(r.seq, args.window_size, args.step_size):
             data[(start, stop)] = process_subseq(subseq, args.analysis)
         # Find hotspots
         log(f"Finding {args.analysis} hotspots in {r.id} using a z-score threshold of {args.zscore}")
-        hotspots = dict(find_hotspots(data, zscore_threshold=args.zscore))
-        merged_hotspots = {}
-        for start, stop in merge_ranges(hotspots.keys(), args.merge):
-            merged_hotspots[(start, stop)] = process_subseq(r.seq[start:stop], args.analysis)
+        hotspots = dict(find_hotspots(data, zscore=args.zscore))
+        if hotspots:
+            if not header_printed:
+                sys.stdout.write(
+                   "reference\tstart\tstop\tanalysis\tvalue\tfeature_type\tfeature_start\tfeature_end\tfeature_name\t"
+                   "feature_locus_tag\tfeature_description\n"
+                )
+                header_printed = True
 
-        # See if and features overlap with the GC hotspots
-        for h_range, v in merged_hotspots.items():
-            h_range_string = f"{r.id}\t{h_range[0]}\t{h_range[1]}\t{args.analysis}_hotspot"
-            for f in r.features:
-                if f.type == args.feature and range_overlap(h_range, (f.location.start, f.location.end)) > 0:
-                    f_name = get_feature_name(f)
-                    f_description = f.qualifiers['product'][0] if 'product' in f.qualifiers else ''
-                    f_string = f"{f.type}\t{f.location.start}\t{f.location.end}\t{f_name}\t{f_description}"
-                    print(f"{h_range_string}\t{v:.2f}\t{f_string}")
+            merged_hotspots = {}  # Merge overlapping hotspots
+            for start, stop in merge_ranges(hotspots.keys(), args.merge):
+                merged_hotspots[(start, stop)] = process_subseq(r.seq[start:stop], args.analysis)
 
+            log(f"Found {len(merged_hotspots)} hotspots")
 
-if __name__ == '__main__':
-    main()
+            # See if and features overlap with the GC hotspots
+            for h_range, v in merged_hotspots.items():
+                for f in r.features:
+                    if f.type == args.feature_type and range_overlap(h_range, (f.location.start, f.location.end)) > 0:
+                        name = f.qualifiers.get('gene', [''])[0]
+                        locus_tag = f.qualifiers.get('locus_tag', [''])[0]
+                        desc = f.qualifiers.get('product', [''])[0]
+                        sys.stdout.write(
+                            f"{r.id}\t{h_range[0]}\t{h_range[1]}\t{args.analysis}_hotspot\t{v:.2f}\t{f.type}\t"
+                            f"{f.location.start}\t{f.location.end}\t{name}\t{locus_tag}\t{desc}\n"
+                        )
+    log("Done!")
